@@ -1,4 +1,5 @@
 import './globals.css';
+import { Analytics } from '@vercel/analytics/react';
 
 // ===========================================
 //  RetainPulse — Root Layout
@@ -136,6 +137,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className="antialiased bg-[#05050c] text-white">
         {children}
+        <Analytics />
       </body>
     </html>
   );
