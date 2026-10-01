@@ -1,5 +1,5 @@
 // ===========================================
-//  ChurnGuard - Paddle Webhook Handler
+//  RetainPulse - Paddle Webhook Handler
 //  Receives and verifies Paddle subscription events
 // ===========================================
 
@@ -15,7 +15,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // --- Verify Paddle webhook signature ---
 function verifySignature(rawBody, signatureHeader) {
   if (!signatureHeader || !WEBHOOK_SECRET) {
-    console.error('[ChurnGuard][paddle] Missing signature or secret');
+    console.error('[RetainPulse][paddle] Missing signature or secret');
     return false;
   }
 
@@ -31,7 +31,7 @@ function verifySignature(rawBody, signatureHeader) {
     const h1 = parts.h1;
 
     if (!ts || !h1) {
-      console.error('[ChurnGuard][paddle] Invalid signature format');
+      console.error('[RetainPulse][paddle] Invalid signature format');
       return false;
     }
 
@@ -47,7 +47,7 @@ function verifySignature(rawBody, signatureHeader) {
       Buffer.from(h1)
     );
   } catch (err) {
-    console.error('[ChurnGuard][paddle] Signature verification error:', err.message);
+    console.error('[RetainPulse][paddle] Signature verification error:', err.message);
     return false;
   }
 }
@@ -86,7 +86,7 @@ export async function POST(request) {
 
     // Verify signature
     if (!verifySignature(rawBody, signature)) {
-      console.error('[ChurnGuard][paddle] Invalid signature');
+      console.error('[RetainPulse][paddle] Invalid signature');
       return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -101,7 +101,7 @@ export async function POST(request) {
     const eventType = event.event_type;
     const data = event.data;
 
-    console.log(`[ChurnGuard][paddle] Event: ${eventType}`);
+    console.log(`[RetainPulse][paddle] Event: ${eventType}`);
 
     // --- Handle subscription events ---
     const email = data?.customer?.email || data?.custom_data?.email;
@@ -143,9 +143,9 @@ export async function POST(request) {
         .eq('email', email);
 
       if (error) {
-        console.error('[ChurnGuard][paddle] DB update error:', error.message);
+        console.error('[RetainPulse][paddle] DB update error:', error.message);
       } else {
-        console.log(`[ChurnGuard][paddle] Activated ${plan} for ${email}`);
+        console.log(`[RetainPulse][paddle] Activated ${plan} for ${email}`);
       }
     }
 
@@ -160,18 +160,18 @@ export async function POST(request) {
         .eq('paddle_subscription_id', subscriptionId);
 
       if (error) {
-        console.error('[ChurnGuard][paddle] DB update error:', error.message);
+        console.error('[RetainPulse][paddle] DB update error:', error.message);
       } else {
-        console.log(`[ChurnGuard][paddle] ${eventType} for ${subscriptionId}`);
+        console.log(`[RetainPulse][paddle] ${eventType} for ${subscriptionId}`);
       }
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[ChurnGuard][paddle] OK | ${eventType} | ${duration}ms`);
+    console.log(`[RetainPulse][paddle] OK | ${eventType} | ${duration}ms`);
 
     return Response.json({ received: true }, { status: 200 });
   } catch (err) {
-    console.error('[ChurnGuard][paddle] Unexpected error:', err);
+    console.error('[RetainPulse][paddle] Unexpected error:', err);
     return Response.json({ error: 'Webhook handler failed' }, { status: 500 });
   }
 }

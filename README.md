@@ -210,9 +210,9 @@ retainpulse/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/owikawa01-a11y/churnguard.git
+git clone https://github.com/owikawa01-a11y/retainpulse.git
 
-cd churnguard
+cd retainpulse
 ```
 
 ### 2. Install dependencies
