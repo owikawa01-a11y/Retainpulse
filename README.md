@@ -11,7 +11,7 @@ Instead of losing customers silently, RetainPulse helps you understand why custo
 * 📊 **Real cancellation reasons** — not just generic survey answers
 * 🤖 **AI follow-up questions** — uncover the reason behind the reason
 * 🎯 **One smart retention offer** — matched to the cancellation reason
-* 💰 **Recovered Revenue tracking** — see exactly how much MRR you saved
+* 💰 **Recovered Revenue tracking** — see estimated MRR retained when customer MRR is provided
 
 > **Installed in 48 hours. Managed for 30 days.**
 > No SDK. No developer sprint.
@@ -229,6 +229,7 @@ Create a `.env.local` file in the project root:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_APP_URL=https://retainpulse.pro
 
 GROQ_API_KEY=your_groq_key
 
@@ -236,6 +237,7 @@ UPSTASH_REDIS_REST_URL=your_upstash_url
 UPSTASH_REDIS_REST_TOKEN=your_upstash_token
 
 RESEND_API_KEY=your_resend_key
+OWNER_EMAIL=your_owner_email
 ```
 
 > **Important:** Never commit `.env.local` or expose your service-role key publicly.
@@ -348,6 +350,7 @@ Before deploying to production:
 * Never expose `SUPABASE_SERVICE_ROLE_KEY`
 * Never commit `.env.local`
 * Keep database Row Level Security enabled
+* Dashboard data is additionally scoped server-side to the authenticated account
 * Validate widget requests server-side
 * Rate-limit public API endpoints
 * Validate domains and widget identifiers

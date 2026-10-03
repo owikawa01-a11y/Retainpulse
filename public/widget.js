@@ -1,11 +1,11 @@
 /**
- * RetainPulse Widget v4.3
- * Single-offer, California-compliant cancellation flow with Pause option
+ * RetainPulse Widget v4.5
+ * Single-offer cancellation flow with Pause option
  *
  * Reads window.RetainPulseConfig dynamically at open-time,
  * so it works regardless of when the config is set on the page.
  *
- * v4.3 changes:
+ * v4.4 changes:
  * - Production API base (retainpulse.pro)
  * - Replaced native alert() with branded toast notifications
  * - Minor stability improvements
@@ -15,6 +15,7 @@
   'use strict';
 
   var API_BASE = 'https://retainpulse.pro';
+  var REQUEST_TIMEOUT_MS = 8000;
 
   // ─────────────────────────────────────────────
   //  Config accessor (dynamic — always fresh)
@@ -49,7 +50,9 @@
     overlay: null,
     escapeHandler: null,
     submitting: false,
-    toastTimer: null
+    toastTimer: null,
+    previousActiveElement: null,
+    previousBodyOverflow: ''
   };
 
   // ─────────────────────────────────────────────
@@ -137,15 +140,41 @@
   }
 
   // ─────────────────────────────────────────────
+  //  Network helper
+  // ─────────────────────────────────────────────
+  function postJson(path, payload) {
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+
+    return fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      })
+      .finally(function () { clearTimeout(timeout); });
+  }
+
+  // ─────────────────────────────────────────────
   //  Modal lifecycle
   // ─────────────────────────────────────────────
   function createModal() {
     removeExistingModal();
 
+    state.previousActiveElement = document.activeElement;
+    state.previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     var overlay = document.createElement('div');
     overlay.id = 'retainpulse-overlay';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Cancellation feedback');
     overlay.style.cssText = [
       'position:fixed', 'inset:0', 'background:rgba(10,10,20,0.6)',
       'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)',
@@ -159,7 +188,7 @@
     box.style.cssText = [
       'background:' + UI.bg, 'border-radius:18px', 'padding:32px',
       'max-width:420px', 'width:100%',
-      'box-shadow:0 25px 70px rgba(0,0,0,0.35)', 'box-sizing:border-box',
+      'box-shadow:0 20x 75x rgba(172, 171, 171, 0.35)', 'box-sizing:border-box',
       'animation:rpSlideUp 0.3s ease-out', 'max-height:90vh', 'overflow-y:auto'
     ].join(';');
 
@@ -176,6 +205,11 @@
       if (e.key === 'Escape') closeModal();
     };
     document.addEventListener('keydown', state.escapeHandler);
+
+    setTimeout(function () {
+      var firstButton = box.querySelector('button, textarea, input');
+      if (firstButton) firstButton.focus();
+    }, 0);
 
     return box;
   }
@@ -202,6 +236,12 @@
 
     state.overlay = null;
     state.submitting = false;
+    document.body.style.overflow = state.previousBodyOverflow;
+    if (state.previousActiveElement && typeof state.previousActiveElement.focus === 'function') {
+      try { state.previousActiveElement.focus(); } catch (e) {}
+    }
+    state.previousActiveElement = null;
+
   }
 
   // ─────────────────────────────────────────────
@@ -270,7 +310,11 @@
       ';font-size:13px;cursor:pointer;padding:8px;font-family:inherit;width:100%;text-decoration:underline;',
       { type: 'button', text: 'Skip and cancel' }
     );
-    skip.addEventListener('click', completeCancellation);
+    skip.addEventListener('click', function () {
+      if (state.submitting) return;
+      state.submitting = true;
+      completeCancellation();
+    });
     box.appendChild(skip);
   }
 
@@ -344,10 +388,10 @@
       submitBtn.textContent = 'Saving...';
       submitBtn.style.opacity = '0.7';
 
-      fetch(API_BASE + '/api/answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_id: eventId, answer: answer })
+      postJson('/api/answer', {
+        event_id: eventId,
+        public_key: getConfig().publicKey,
+        answer: answer
       })
         .catch(function (err) { console.error('[RetainPulse] Failed to save answer:', err); })
         .then(function () { fetchAndShowOffer(box, eventId, reason, answer); });
@@ -360,7 +404,11 @@
       ';font-size:13px;cursor:pointer;padding:8px;font-family:inherit;width:100%;text-decoration:underline;',
       { type: 'button', text: 'Skip and cancel' }
     );
-    skip.addEventListener('click', completeCancellation);
+    skip.addEventListener('click', function () {
+      if (state.submitting) return;
+      state.submitting = true;
+      recordDecision(eventId, false).then(function () { completeCancellation(); });
+    });
     box.appendChild(skip);
   }
 
@@ -370,25 +418,19 @@
   function fetchAndShowOffer(box, eventId, reason, answer) {
     renderLoadingStep(box, 'Preparing something...');
 
-    fetch(API_BASE + '/api/retention', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_id: eventId,
-        reason: reason,
-        follow_up_answer: answer
-      })
+    postJson('/api/retention', {
+      event_id: eventId,
+      public_key: getConfig().publicKey,
+      reason: reason,
+      follow_up_answer: answer
     })
-      .then(function (res) {
-        return res.json().then(function (d) { return { ok: res.ok, data: d }; });
-      })
       .then(function (result) {
         if (!result.ok || !result.data.offer) {
           recordDecision(eventId, false);
           completeCancellation();
           return;
         }
-        renderOfferStep(box, eventId, result.data.offer);
+        renderOfferStep(box, eventId, result.data.offer, result.data.offer_type);
       })
       .catch(function (err) {
         console.error('[RetainPulse] Failed to fetch offer:', err);
@@ -400,7 +442,7 @@
   // ─────────────────────────────────────────────
   //  Step 4: Offer display
   // ─────────────────────────────────────────────
-  function renderOfferStep(box, eventId, offerText) {
+  function renderOfferStep(box, eventId, offerText, offerType) {
     clearElement(box);
     state.submitting = false;
 
@@ -423,7 +465,7 @@
       'border-radius:12px', 'font-size:14px', 'font-weight:600',
       'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
       'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
-    ].join(';'), { type: 'button', text: 'Yes, keep my account' });
+    ].join(';'), { type: 'button', text: offerType === 'pause' ? 'Yes, pause my account' : 'Yes, keep my account' });
 
     acceptBtn.addEventListener('click', function () {
       if (state.submitting) return;
@@ -433,7 +475,7 @@
       acceptBtn.textContent = 'Saving...';
       acceptBtn.style.opacity = '0.7';
 
-      recordDecision(eventId, true).then(function () {
+      recordDecision(eventId, true, offerType === 'pause' ? 'paused' : 'stayed').then(function () {
         var config = getConfig();
         closeModal();
         if (typeof config.onOfferAccepted === 'function') {
@@ -446,37 +488,7 @@
     });
     box.appendChild(acceptBtn);
 
-    // Pause
-    var pauseBtn = el('button', [
-      'width:100%', 'padding:12px', 'margin-bottom:10px',
-      'background:transparent', 'color:' + UI.text,
-      'border:1.5px solid ' + UI.border,
-      'border-radius:12px', 'font-size:13px', 'font-weight:500',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s'
-    ].join(';'), { type: 'button', text: 'Or pause for 2 months (resume anytime)' });
-
-    pauseBtn.addEventListener('mouseenter', function () { pauseBtn.style.background = '#f9fafb'; });
-    pauseBtn.addEventListener('mouseleave', function () { pauseBtn.style.background = 'transparent'; });
-    pauseBtn.addEventListener('click', function () {
-      if (state.submitting) return;
-      state.submitting = true;
-
-      pauseBtn.disabled = true;
-      pauseBtn.textContent = 'Pausing...';
-      pauseBtn.style.opacity = '0.6';
-
-      recordDecision(eventId, true, 'paused').then(function () {
-        var config = getConfig();
-        closeModal();
-        if (typeof config.onOfferAccepted === 'function') {
-          try { config.onOfferAccepted(); }
-          catch (err) { console.error('[RetainPulse] onOfferAccepted failed:', err); }
-        } else {
-          showToast("We've noted your request — your subscription will be paused for 2 months.");
-        }
-      });
-    });
-    box.appendChild(pauseBtn);
+    // No secondary offer is shown: the server returns exactly one deterministic offer.
 
     // Decline
     var declineBtn = el('button', [
@@ -595,18 +607,14 @@
   // ─────────────────────────────────────────────
   function recordDecision(eventId, accepted, action) {
     var config = getConfig();
-    var payload = { event_id: eventId, accepted: accepted };
+    var payload = { event_id: eventId, public_key: config.publicKey, accepted: accepted };
     if (action) payload.action = action;
     if (typeof config.customerMrr === 'number' && config.customerMrr >= 0) {
       payload.customer_mrr = config.customerMrr;
     }
 
-    return fetch(API_BASE + '/api/decision', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(function (res) { return res.json(); })
+    return postJson('/api/decision', payload)
+      .then(function (result) { return result.data || null; })
       .then(function (data) {
         console.log('[RetainPulse] Decision recorded:', data);
         return data;
@@ -637,7 +645,7 @@
   window.RetainPulse = {
     show: show,
     hide: closeModal,
-    version: '4.3'
+    version: '4.5'
   };
 
   // ─────────────────────────────────────────────
@@ -658,7 +666,7 @@
   function boot() {
     injectStyles();
     init();
-    console.log('[RetainPulse] Widget v4.3 ready');
+    console.log('[RetainPulse] Widget v4.5 ready');
   }
 
   if (document.readyState === 'loading') {

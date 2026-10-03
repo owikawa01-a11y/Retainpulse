@@ -190,7 +190,7 @@ export default function Login() {
 
         {/* Bottom Trust Line */}
         <p className="text-center text-xs text-slate-600 mt-6 tracking-wider">
-          🔒 Secured by Supabase RLS
+          🔒 Protected by authenticated access controls
         </p>
 
       </div>

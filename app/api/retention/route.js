@@ -1,11 +1,13 @@
 // ===========================================
 //  RetainPulse API - Retention Route
-//  Generates ONE retention offer (California ARA compliant)
+//  Generates ONE retention offer
 //  AI only phrases the offer - never invents terms
 // ===========================================
 
-import { createClient } from '@supabase/supabase-js';
 import { retentionRatelimit, getClientIP } from '../../../lib/ratelimit';
+import { getSupabaseAdmin } from '../../../lib/serverSupabase';
+import { verifyEventOwnership, UUID_REGEX } from '../../../lib/widgetAuth';
+import { CORS_HEADERS, errorResponse, jsonResponse, parseJson, sanitizeText } from '../../../lib/api';
 
 // --- Environment Variables ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,27 +18,12 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('[RetainPulse][retention] Missing Supabase env vars');
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-// --- CORS Headers ---
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-// --- Response Helpers ---
-const jsonResponse = (data, status = 200, extra = {}) =>
-  Response.json(data, { status, headers: { ...CORS_HEADERS, ...extra } });
-
-const errorResponse = (message, status = 500, code = 'ERROR') =>
-  jsonResponse({ success: false, error: message, code }, status);
 
 // --- Constants ---
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_TIMEOUT_MS = 5000;
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // --- Fixed Offer Terms (founder controls, AI only phrases) ---
 function getOfferForReason(reason) {
@@ -128,26 +115,33 @@ export async function POST(request) {
     }
 
     // --- Parse Body ---
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse('Invalid JSON body', 400, 'INVALID_JSON');
-    }
+    const { body, error: parseError } = await parseJson(request);
+    if (parseError) return errorResponse(parseError, 400, 'INVALID_JSON');
 
-    const { event_id, reason, follow_up_answer } = body;
+    const { event_id, public_key, reason, follow_up_answer } = body || {};
+    const cleanReason = sanitizeText(reason, 500);
+    const cleanFollowUpAnswer = typeof follow_up_answer === 'string'
+      ? sanitizeText(follow_up_answer, 1000)
+      : '';
 
     // --- Validate Input ---
     if (!event_id || typeof event_id !== 'string' || !UUID_REGEX.test(event_id)) {
       return errorResponse('Missing or invalid event_id', 400, 'INVALID_EVENT_ID');
     }
 
-    if (!reason || typeof reason !== 'string') {
+    if (!cleanReason) {
       return errorResponse('Missing or invalid reason', 400, 'INVALID_REASON');
     }
 
+    const ownership = await verifyEventOwnership(event_id, public_key);
+    if (!ownership.ok) {
+      return errorResponse(ownership.message, ownership.status, ownership.code);
+    }
+
+    const supabase = getSupabaseAdmin();
+
     // --- Get Fixed Offer ---
-    const offer = getOfferForReason(reason);
+    const offer = getOfferForReason(cleanReason);
     let offerCopy = "We'd like to offer you " + offer.terms + '.';
 
     // --- AI Phrases It ---
@@ -160,8 +154,8 @@ export async function POST(request) {
 
         const userContent =
           'A customer is about to cancel their subscription.' +
-          '\nTheir reason: "' + reason + '".' +
-          (follow_up_answer ? '\nAdditional context: "' + follow_up_answer + '".' : '') +
+          '\nTheir reason: "' + cleanReason + '".' +
+          (cleanFollowUpAnswer ? '\nAdditional context: "' + cleanFollowUpAnswer + '".' : '') +
           '\n\nWrite ONE warm, human sentence presenting this EXACT offer: "' + offer.terms + '".' +
           '\n\nRules:' +
           '\n- Do not change the offer terms.' +
@@ -192,7 +186,7 @@ export async function POST(request) {
         if (groqRes.ok) {
           const data = await groqRes.json();
           const text = data?.choices?.[0]?.message?.content?.trim();
-          if (isValidOfferCopy(text)) {
+          if (isValidOfferCopy(text, offer.terms)) {
             offerCopy = text;
             aiSource = 'groq';
           }
@@ -212,7 +206,8 @@ export async function POST(request) {
     const { error: updateError } = await supabase
       .from('cancellation_events')
       .update({ offer_shown: offer.terms })
-      .eq('id', event_id);
+      .eq('id', event_id)
+      .eq('widget_id', ownership.widgetId);
 
     if (updateError) {
       console.error('[RetainPulse][retention] DB update error:', updateError.message);
@@ -238,11 +233,15 @@ export async function POST(request) {
 //  Utilities
 // ===========================================
 
-function isValidOfferCopy(text) {
+function isValidOfferCopy(text, terms) {
   if (!text || typeof text !== 'string') return false;
   const t = text.trim();
-  if (t.length < 10 || t.length > 300) return false;
+  if (t.length < 10 || t.length > 320) return false;
   if (/^(offer|copy|sentence)[\s:]/i.test(t)) return false;
   if (/^["'].*["']$/.test(t)) return false;
-  return true;
+  if (/[\r\n]/.test(t)) return false;
+
+  const lower = t.toLowerCase();
+  const criticalTerms = terms.match(/\d+%|\d+\s*-?month(?:s)?|\d+\s*-?minute(?:s)?/gi) || [];
+  return criticalTerms.every((term) => lower.includes(term.toLowerCase().replace(/\s+/g, ' ').trim()));
 }

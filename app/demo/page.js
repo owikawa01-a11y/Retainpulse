@@ -45,7 +45,6 @@ export default function DemoPage() {
     window.RetainPulseConfig = {
       publicKey: '3a11005ef9ac7874bd34c67a',
       customerEmail: 'demo@customer.com',
-      customerMrr: 49,
       cancelUrl: '/demo',
     };
 

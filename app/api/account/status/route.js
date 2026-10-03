@@ -3,13 +3,9 @@
 //  Returns subscription status for the current user
 // ===========================================
 
-import { createClient } from '@supabase/supabase-js';
+import { getAuthenticatedUser, getSupabaseAdmin } from '../../../../lib/serverSupabase';
 import { getAccountAccess } from '../../../../lib/trial';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -23,27 +19,15 @@ export async function OPTIONS() {
 
 export async function GET(request) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
+    const { user, error: authError } = await getAuthenticatedUser(request);
+    if (!user) {
       return Response.json(
-        { error: 'Missing authorization' },
+        { error: authError || 'Invalid session' },
         { status: 401, headers: CORS_HEADERS }
       );
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: userData, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !userData?.user) {
-      return Response.json(
-        { error: 'Invalid session' },
-        { status: 401, headers: CORS_HEADERS }
-      );
-    }
-
-    const user = userData.user;
-
-    // Fetch account
+    const supabase = getSupabaseAdmin();
     const { data: account, error: accError } = await supabase
       .from('accounts')
       .select('*')

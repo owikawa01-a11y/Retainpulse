@@ -68,43 +68,44 @@ export default function EmbedPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        router.replace('/login');
         return;
       }
-      setUser(user);
 
-      // Fetch public key
-      const { data: widgetData } = await supabase
-        .from('widgets')
-        .select('public_key')
-        .eq('account_id', user.id)
-        .single();
+      setUser(session.user);
 
-      if (widgetData) {
-        setPublicKey(widgetData.public_key);
-      } else {
-        const { data: accData } = await supabase
-          .from('accounts')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
+      try {
+        const res = await fetch('/api/dashboard', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        });
 
-        if (accData) {
-          const { data: wData } = await supabase
-            .from('widgets')
-            .select('public_key')
-            .eq('account_id', accData.id)
-            .single();
-          if (wData) setPublicKey(wData.public_key);
+        if (res.status === 401) {
+          await supabase.auth.signOut();
+          router.replace('/login');
+          return;
         }
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not load account data');
+        }
+
+        if (!cancelled) setPublicKey(data.widget?.public_key || null);
+      } catch (error) {
+        console.error('[Embed] Load failed:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchData();
+    return () => { cancelled = true; };
   }, [router]);
 
   const getEmbedCode = (key) => {
@@ -113,25 +114,20 @@ export default function EmbedPage() {
   window.RetainPulseConfig = {
     publicKey: "${key}",
 
-    // OPTIONAL: Average monthly revenue per customer.
-    // Used to calculate "Recovered Revenue" in your dashboard.
-    // If not set, we default to $50.
-    customerMrr: 49,
+    // OPTIONAL: Reported monthly revenue for analytics only.
+    // This is not authoritative billing data and can be omitted.
+    // If omitted, RetainPulse will not estimate recovered MRR for this event.
 
-    // REQUIRED: This function runs when the customer confirms cancellation.
-    // Replace the console.log with your actual cancellation logic.
+    // Managed setup: RetainPulse wires this callback to your real cancellation flow.
+    // Self-installation: connect it to the same server-side cancellation action your product already uses.
     onCancelConfirmed: function() {
-      // Example:
-      // fetch('/api/cancel-subscription', { method: 'POST' });
-      console.log('Cancel confirmed - run your cancel logic here');
+      console.log('Cancel confirmed');
     },
 
-    // OPTIONAL: Called when the customer accepts the retention offer.
-    // Apply the discount/pause in your billing system here.
+    // Managed setup: RetainPulse wires this callback to your billing/subscription action.
+    // Self-installation: connect it to your existing discount/pause action.
     onOfferAccepted: function() {
-      // Example:
-      // fetch('/api/apply-discount', { method: 'POST' });
-      console.log('Offer accepted - apply the discount here');
+      console.log('Retention offer accepted');
     }
   };
 </script>
@@ -386,11 +382,11 @@ export default function EmbedPage() {
             <ul className="space-y-2 text-sm text-slate-400">
               <li className="flex gap-2">
                 <span className="text-violet-400">•</span>
-                <span>Set <code className="text-violet-300 bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono">customerMrr</code> to your average monthly revenue per customer to unlock accurate "Recovered Revenue" tracking.</span>
+                <span>Pass the actual <code className="text-violet-300 bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono">customerMrr</code> when available so RetainPulse can estimate recovered MRR. It is optional.</span>
               </li>
               <li className="flex gap-2">
                 <span className="text-violet-400">•</span>
-                <span>Use <code className="text-violet-300 bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono">onOfferAccepted</code> to auto-apply discounts in your billing system (Stripe, Chargebee, etc).</span>
+                <span>For done-for-you setups, we configure the billing action with your existing billing flow. The callback is available when your team wants to handle it directly.</span>
               </li>
               <li className="flex gap-2">
                 <span className="text-violet-400">•</span>
@@ -398,7 +394,7 @@ export default function EmbedPage() {
               </li>
               <li className="flex gap-2">
                 <span className="text-violet-400">•</span>
-                <span>All data is securely stored and scoped to your account (RLS-protected).</span>
+                <span>Dashboard access requires your account login, and event writes are verified against the originating widget.</span>
               </li>
             </ul>
           </div>

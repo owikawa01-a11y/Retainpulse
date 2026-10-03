@@ -1,14 +1,10 @@
 {
   "name": "retainpulse",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Done-for-you cancellation flow for indie SaaS founders. Installed in 48 hours.",
   "author": "RetainPulse",
   "homepage": "https://retainpulse.pro",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/owikawa01-a11y/retainpulse.git"
-  },
   "keywords": [
     "saas",
     "churn",
@@ -23,7 +19,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@dodopayments/nextjs": "^0.3.9",
     "@supabase/supabase-js": "^2.115.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.4",

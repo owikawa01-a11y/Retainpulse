@@ -3,9 +3,10 @@
 //  Generates AI follow-up question + sends email notification
 // ===========================================
 
-import { createClient } from '@supabase/supabase-js';
 import { followUpRatelimit, getClientIP } from '../../../lib/ratelimit';
 import { sendCancellationAlert } from '../../../lib/sendEmail';
+import { getSupabaseAdmin } from '../../../lib/serverSupabase';
+import { CORS_HEADERS, errorResponse, jsonResponse, parseJson, sanitizeText } from '../../../lib/api';
 
 // --- Environment Variables ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,21 +17,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('[RetainPulse][follow-up] Missing Supabase env vars');
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-// --- CORS Headers ---
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-// --- Response Helpers ---
-const jsonResponse = (data, status = 200, extra = {}) =>
-  Response.json(data, { status, headers: { ...CORS_HEADERS, ...extra } });
-
-const errorResponse = (message, status = 500, code = 'ERROR') =>
-  jsonResponse({ success: false, error: message, code }, status);
 
 // --- Constants ---
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -93,12 +80,8 @@ export async function POST(request) {
     }
 
     // --- Parse Body ---
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse('Invalid JSON body', 400, 'INVALID_JSON');
-    }
+    const { body, error: parseError } = await parseJson(request);
+    if (parseError) return errorResponse(parseError, 400, 'INVALID_JSON');
 
     const { public_key, reason, customer_email } = body;
 
@@ -112,11 +95,13 @@ export async function POST(request) {
     }
 
     // --- Sanitize ---
-    const cleanReason = sanitizeInput(reason, 500);
+    const cleanReason = sanitizeText(reason, 500);
     const cleanPublicKey = public_key.trim().slice(0, 100);
     const cleanEmail = customer_email && typeof customer_email === 'string'
-      ? customer_email.trim().slice(0, 200)
+      ? sanitizeText(customer_email, 200).toLowerCase()
       : null;
+
+    const supabase = getSupabaseAdmin();
 
     // --- Find Widget ---
     const { data: widget, error: widgetError } = await supabase
@@ -259,15 +244,6 @@ export async function POST(request) {
 // ===========================================
 //  Utilities
 // ===========================================
-
-function sanitizeInput(text, maxLength) {
-  if (typeof text !== 'string') return '';
-  return text
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
-    .replace(/[<>]/g, '')
-    .trim()
-    .slice(0, maxLength);
-}
 
 function isValidQuestion(text) {
   if (!text || typeof text !== 'string') return false;

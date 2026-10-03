@@ -1,5 +1,5 @@
 // ===========================================
-//  ChurnGuard - Paddle Checkout Session
+//  RetainPulse - Paddle Checkout Session
 //  Creates a Paddle transaction for overlay checkout
 // ===========================================
 
@@ -40,7 +40,7 @@ export async function POST(request) {
 
   try {
     if (!PADDLE_API_KEY || !STARTER_PRICE_ID || !PRO_PRICE_ID) {
-      console.error('[ChurnGuard][checkout] Missing Paddle env vars');
+      console.error('[RetainPulse][checkout] Missing Paddle env vars');
       return errorResponse('Server configuration error', 500, 'CONFIG_ERROR');
     }
 
@@ -98,7 +98,7 @@ export async function POST(request) {
 
     if (!paddleResponse.ok) {
       const errText = await paddleResponse.text();
-      console.error('[ChurnGuard][checkout] Paddle API error:', errText);
+      console.error('[RetainPulse][checkout] Paddle API error:', errText);
       return errorResponse('Paddle API error: ' + errText, 500, 'PADDLE_ERROR');
     }
 
@@ -106,19 +106,19 @@ export async function POST(request) {
     const transactionId = paddleData?.data?.id;
 
     if (!transactionId) {
-      console.error('[ChurnGuard][checkout] No transaction ID in response');
+      console.error('[RetainPulse][checkout] No transaction ID in response');
       return errorResponse('No transaction ID returned', 500, 'NO_TXN');
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[ChurnGuard][checkout] OK | ${plan} | txn=${transactionId} | ${duration}ms`);
+    console.log(`[RetainPulse][checkout] OK | ${plan} | txn=${transactionId} | ${duration}ms`);
 
     return jsonResponse({
       success: true,
       transaction_id: transactionId,
     });
   } catch (err) {
-    console.error('[ChurnGuard][checkout] Unexpected error:', err);
+    console.error('[RetainPulse][checkout] Unexpected error:', err);
     return errorResponse('Internal server error', 500, 'INTERNAL_ERROR');
   }
 }

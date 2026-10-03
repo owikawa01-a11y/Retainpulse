@@ -111,51 +111,49 @@ export default function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        router.replace('/login');
         return;
       }
-      setUser(user);
 
-      // Fetch public key
-      const { data: widgetData } = await supabase
-        .from('widgets')
-        .select('public_key')
-        .eq('account_id', user.id)
-        .single();
+      if (cancelled) return;
+      setUser(session.user);
 
-      if (widgetData) {
-        setPublicKey(widgetData.public_key);
-      } else {
-        const { data: accData } = await supabase
-          .from('accounts')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
-        if (accData) {
-          const { data: wData } = await supabase
-            .from('widgets')
-            .select('public_key')
-            .eq('account_id', accData.id)
-            .single();
-          if (wData) setPublicKey(wData.public_key);
+      try {
+        const res = await fetch('/api/dashboard', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        });
+
+        if (res.status === 401) {
+          await supabase.auth.signOut();
+          router.replace('/login');
+          return;
         }
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not load dashboard');
+        }
+
+        if (!cancelled) {
+          setPublicKey(data.widget?.public_key || null);
+          setEvents(data.events || []);
+        }
+      } catch (error) {
+        console.error('[Dashboard] Load failed:', error);
+        if (!cancelled) showToast('Could not load dashboard data. Please refresh.', 'error');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      // Fetch events
-      const { data: eventsData, error } = await supabase
-        .from('cancellation_events')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error) setEvents(eventsData || []);
-
-      setLoading(false);
     };
 
     fetchData();
+    return () => { cancelled = true; };
   }, [router]);
 
   const handleLogout = async () => {
@@ -179,7 +177,6 @@ export default function Dashboard() {
     window.RetainPulseConfig = {
       publicKey: publicKey,
       customerEmail: 'demo@customer.com',
-      customerMrr: 49,
       cancelUrl: '/dashboard',
     };
 
@@ -214,7 +211,7 @@ export default function Dashboard() {
         `"${(e.initial_reason || e.reason || '').replace(/"/g, '""')}"`,
         status,
         `"${(e.offer_shown || '').replace(/"/g, '""')}"`,
-        e.customer_mrr || '0',
+        e.customer_mrr != null ? e.customer_mrr : '',
       ];
     });
 
@@ -257,14 +254,16 @@ export default function Dashboard() {
 
   const savedThisMonth = savedEvents.filter((e) => new Date(e.created_at) >= startOfMonth).length;
 
-  const recoveredThisMonth = savedEvents
+  const revenueEvents = savedEvents.filter((e) => e.final_action === 'stayed' && Number.isFinite(Number(e.customer_mrr)) && Number(e.customer_mrr) > 0);
+  const recoveredThisMonth = revenueEvents
     .filter((e) => new Date(e.created_at) >= startOfMonth)
-    .reduce((sum, e) => sum + (Number(e.customer_mrr) || 0), 0);
+    .reduce((sum, e) => sum + Number(e.customer_mrr), 0);
 
-  const recoveredAllTime = savedEvents.reduce(
-    (sum, e) => sum + (Number(e.customer_mrr) || 0),
+  const recoveredAllTime = revenueEvents.reduce(
+    (sum, e) => sum + Number(e.customer_mrr),
     0
   );
+  const hasRevenueData = revenueEvents.length > 0;
 
   const saveRate = decidedEvents.length > 0
     ? Math.round((savedEvents.length / decidedEvents.length) * 100)
@@ -368,15 +367,15 @@ export default function Dashboard() {
                       <IconDollar />
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold text-emerald-300/90 uppercase tracking-[0.15em]">Recovered Revenue</p>
+                      <p className="text-[11px] font-semibold text-emerald-300/90 uppercase tracking-[0.15em]">Estimated Recovered MRR</p>
                       <p className="text-xs text-slate-500 mt-0.5">Saved this month</p>
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-5xl md:text-7xl font-black tracking-tight bg-gradient-to-br from-white via-emerald-100 to-emerald-300 bg-clip-text text-transparent">
-                      ${recoveredThisMonth.toFixed(0)}
+                      {hasRevenueData ? `$${recoveredThisMonth.toFixed(0)}` : '—'}
                     </span>
-                    <span className="text-slate-500 text-sm">/ month</span>
+                    <span className="text-slate-500 text-sm">{hasRevenueData ? 'estimated / month' : 'provide customer MRR to estimate'}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 lg:gap-8 lg:border-l lg:border-white/[0.06] lg:pl-8">
@@ -392,7 +391,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">All Time</p>
-                    <p className="text-3xl md:text-4xl font-bold text-white tabular-nums">${recoveredAllTime.toFixed(0)}</p>
+                    <p className="text-3xl md:text-4xl font-bold text-white tabular-nums">{hasRevenueData ? `$${recoveredAllTime.toFixed(0)}` : '—'}</p>
                     <p className="text-[10px] text-slate-500 mt-1">total saved</p>
                   </div>
                 </div>
