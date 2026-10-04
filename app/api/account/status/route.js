@@ -6,9 +6,11 @@
 import { getAuthenticatedUser, getSupabaseAdmin } from '../../../../lib/serverSupabase';
 import { getAccountAccess } from '../../../../lib/trial';
 
+// تحديد النطاق المسموح به لـ CORS للحد من الثغرات الأمنية
+const ALLOWED_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || '*';
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
@@ -19,6 +21,7 @@ export async function OPTIONS() {
 
 export async function GET(request) {
   try {
+    // 1. التحقق من جلسة المستخدم
     const { user, error: authError } = await getAuthenticatedUser(request);
     if (!user) {
       return Response.json(
@@ -27,12 +30,13 @@ export async function GET(request) {
       );
     }
 
+    // 2. جلب الحقول المطلوبة فقط لرفع الأداء من Supabase
     const supabase = getSupabaseAdmin();
     const { data: account, error: accError } = await supabase
       .from('accounts')
-      .select('*')
+      .select('plan_status, subscription_status, subscription_plan, trial_ends_at, current_period_end')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (accError || !account) {
       return Response.json(
@@ -41,6 +45,7 @@ export async function GET(request) {
       );
     }
 
+    // 3. حساب صلاحيات الوصول
     const access = getAccountAccess(account);
 
     return Response.json(
