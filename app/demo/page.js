@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 // ===========================================
@@ -8,15 +8,8 @@ import Link from 'next/link';
 // ===========================================
 const Logo = () => (
   <div className="flex items-center gap-2.5">
-    <div className="relative w-9 h-9 rounded-[10px] bg-gradient-to-br from-violet-500 via-violet-600 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-      <div className="absolute inset-0 rounded-[10px] bg-gradient-to-tr from-transparent via-white/25 to-transparent"></div>
-      <svg className="w-5 h-5 text-white relative" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 12h3l2-7 4 14 2-7h7" />
-      </svg>
-    </div>
-    <span className="text-lg font-bold tracking-tight">
-      Retain<span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">Pulse</span>
-    </span>
+    <img src="/logo-mark.svg" alt="" className="w-9 h-9 rounded-[11px]" />
+    <span className="text-lg font-bold tracking-tight">Retain<span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">Pulse</span></span>
   </div>
 );
 
@@ -40,6 +33,7 @@ const IconCheck = () => (
 // ===========================================
 export default function DemoPage() {
   const [showWidget, setShowWidget] = useState(false);
+  const [isEmbed, setIsEmbed] = useState(false);
 
   const loadWidget = () => {
     window.RetainPulseConfig = {
@@ -61,6 +55,16 @@ export default function DemoPage() {
     document.body.appendChild(script);
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const embed = new URLSearchParams(window.location.search).get('embed') === '1';
+    setIsEmbed(embed);
+    if (embed) {
+      const timer = setTimeout(loadWidget, 650);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   return (
     <div className="relative min-h-screen bg-[#05050c] text-white overflow-hidden">
 
@@ -72,7 +76,7 @@ export default function DemoPage() {
 
       <div className="relative z-10">
 
-        {/* ═══════ Navbar ═══════ */}
+        {!isEmbed && <>{/* ═══════ Navbar ═══════ */}
         <nav className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <Link href="/">
             <Logo />
@@ -82,10 +86,10 @@ export default function DemoPage() {
               ← Back to home
             </button>
           </Link>
-        </nav>
+        </nav></>}
 
         {/* ═══════ Hero ═══════ */}
-        <section className="max-w-4xl mx-auto px-6 pt-12 md:pt-20 pb-16 text-center">
+        {!isEmbed && <section className="max-w-4xl mx-auto px-6 pt-12 md:pt-20 pb-16 text-center">
 
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -119,10 +123,10 @@ export default function DemoPage() {
           <p className="text-xs text-slate-500 mt-4">
             No account needed · Takes 30 seconds
           </p>
-        </section>
+        </section>}
 
         {/* ═══════ Stats Preview ═══════ */}
-        <section className="max-w-4xl mx-auto px-6 pb-16">
+        {!isEmbed && <section className="max-w-4xl mx-auto px-6 pb-16">
           <p className="text-center text-xs uppercase tracking-[0.25em] text-slate-500 mb-6">
             Sample dashboard metrics
           </p>
@@ -145,10 +149,10 @@ export default function DemoPage() {
           <p className="text-center text-xs text-slate-600 mt-4">
             ↑ Live preview of what your RetainPulse dashboard will show
           </p>
-        </section>
+        </section>}
 
         {/* ═══════ What You Saw ═══════ */}
-        <section className="max-w-2xl mx-auto px-6 pb-16">
+        {!isEmbed && <section className="max-w-2xl mx-auto px-6 pb-16">
           <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-6 md:p-8">
             <h3 className="text-base font-semibold text-white mb-5">
               What you just saw
@@ -176,10 +180,10 @@ export default function DemoPage() {
               </li>
             </ul>
           </div>
-        </section>
+        </section>}
 
         {/* ═══════ CTA Section ═══════ */}
-        <section className="max-w-3xl mx-auto px-6 pb-24">
+        {!isEmbed && <section className="max-w-3xl mx-auto px-6 pb-24">
           <div className="relative p-8 md:p-12 rounded-3xl bg-gradient-to-br from-violet-500/[0.10] via-fuchsia-500/[0.04] to-transparent border border-violet-500/20 overflow-hidden">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[400px] bg-violet-500/[0.15] rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
 
@@ -221,7 +225,7 @@ export default function DemoPage() {
               © 2026 RetainPulse. All rights reserved.
             </p>
           </div>
-        </footer>
+        </footer>}
 
       </div>
     </div>

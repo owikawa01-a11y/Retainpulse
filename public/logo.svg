@@ -1,0 +1,8 @@
+<svg width="900" height="180" viewBox="0 0 900 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="g" x1="18" y1="25" x2="160" y2="155" gradientUnits="userSpaceOnUse"><stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#D946EF"/></linearGradient></defs>
+<rect x="10" y="10" width="160" height="160" rx="42" fill="#05050C"/>
+<path d="M35 102C49 102 53 73 67 73C81 73 82 122 96 122C111 122 111 59 125 59C139 59 144 102 158 102" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
+<path d="M42 122C55 122 60 104 69 104C79 104 86 135 96 135C108 135 113 85 123 85C133 85 142 122 151 122" stroke="white" stroke-opacity=".18" stroke-width="3" stroke-linecap="round"/>
+<circle cx="96" cy="122" r="4" fill="white"/>
+<text x="205" y="111" fill="white" font-family="Inter,Arial,sans-serif" font-size="72" font-weight="700" letter-spacing="-3">RetainPulse</text>
+</svg>

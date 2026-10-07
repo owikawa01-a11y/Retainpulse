@@ -18,7 +18,7 @@ export const metadata = {
 
   // ─── Description ────────────────────────
   description:
-    'I install RetainPulse on your SaaS in 48 hours — then manage it for 30 days. Know exactly why your customers cancel, and get a real shot at keeping them.',
+    'RetainPulse installs a smarter cancellation flow on your SaaS in 48 hours — uncover the real reason customers leave and give each cancellation one relevant chance to recover.',
 
   // ─── Keywords ───────────────────────────
   keywords: [
@@ -46,10 +46,10 @@ export const metadata = {
   // ─── Icons ──────────────────────────────
   icons: {
     icon: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
-    shortcut: '/icon.svg',
-    apple: '/icon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/logo-mark.svg',
   },
 
   // ─── OpenGraph ──────────────────────────

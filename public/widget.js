@@ -38,12 +38,12 @@
   var UI = {
     brand: '#8b5cf6',
     brandGradient: 'linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)',
-    text: '#111827',
-    textMuted: '#6b7280',
-    textSubtle: '#9ca3af',
-    border: '#e5e7eb',
-    bg: '#ffffff',
-    bgSubtle: '#fafafa'
+    text: '#ffffff',
+    textMuted: '#94a3b8',
+    textSubtle: '#64748b',
+    border: 'rgba(255,255,255,0.09)',
+    bg: '#0a0a14',
+    bgSubtle: '#11111d'
   };
 
   var state = {
@@ -107,7 +107,7 @@
       'background:' + UI.bg, 'border:1px solid ' + UI.border,
       'border-radius:14px', 'padding:16px 20px',
       'box-shadow:0 15px 40px rgba(0,0,0,0.15)',
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+      'font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
       'font-size:14px', 'color:' + UI.text, 'line-height:1.5',
       'z-index:2147483647', 'display:flex', 'align-items:flex-start', 'gap:12px',
       'animation:rpToastIn 0.3s ease-out',
@@ -176,11 +176,11 @@
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Cancellation feedback');
     overlay.style.cssText = [
-      'position:fixed', 'inset:0', 'background:rgba(10,10,20,0.6)',
+      'position:fixed', 'inset:0', 'background:rgba(5,5,12,0.72)',
       'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)',
       'z-index:2147483647', 'display:flex', 'align-items:center',
       'justify-content:center', 'padding:20px',
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+      'font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
       'animation:rpFadeIn 0.2s ease-out'
     ].join(';');
 
@@ -188,7 +188,7 @@
     box.style.cssText = [
       'background:' + UI.bg, 'border-radius:18px', 'padding:32px',
       'max-width:420px', 'width:100%',
-      'box-shadow:0 20x 75x rgba(172, 171, 171, 0.35)', 'box-sizing:border-box',
+      'box-shadow:0 24px 80px rgba(0,0,0,0.55)', 'box-sizing:border-box',
       'animation:rpSlideUp 0.3s ease-out', 'max-height:90vh', 'overflow-y:auto'
     ].join(';');
 
@@ -288,7 +288,7 @@
 
       btn.addEventListener('mouseenter', function () {
         btn.style.borderColor = UI.brand;
-        btn.style.background = '#f5f3ff';
+        btn.style.background = '#17142a';
         btn.style.transform = 'translateY(-1px)';
       });
       btn.addEventListener('mouseleave', function () {
