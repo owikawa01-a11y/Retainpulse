@@ -415,7 +415,18 @@
   // ─────────────────────────────────────────────
   //  Step 3: Fetch + show retention offer
   // ─────────────────────────────────────────────
-  function fetchAndShowOffer(box, eventId, reason, answer) {
+    function fetchAndShowOffer(box, eventId, reason, answer) {
+    // If reason is "Too expensive" and we have the customer's email,
+    // open a Haggin negotiation instead of the standard offer.
+    var config = getConfig();
+    if (reason === 'Too expensive' && config.customerEmail) {
+      createAndShowHaggin(box, eventId, reason, answer);
+      return;
+    }
+    fetchAndShowStandardOffer(box, eventId, reason, answer);
+  }
+
+  function fetchAndShowStandardOffer(box, eventId, reason, answer) {
     renderLoadingStep(box, 'Preparing something...');
 
     postJson('/api/retention', {
@@ -438,7 +449,7 @@
         completeCancellation();
       });
   }
-
+  
   // ─────────────────────────────────────────────
   //  Step 4: Offer display
   // ─────────────────────────────────────────────
@@ -512,6 +523,92 @@
       });
     });
     box.appendChild(declineBtn);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Step 5: Haggin negotiation (for "Too expensive")
+  // ─────────────────────────────────────────────
+  function createAndShowHaggin(box, eventId, reason, answer) {
+    renderLoadingStep(box, 'Opening a negotiation...');
+
+    var config = getConfig();
+
+    postJson('/api/haggin/create', {
+      customerName: config.customerName || 'Customer',
+      customerEmail: config.customerEmail
+    })
+      .then(function (result) {
+        if (!result.ok || !result.data.publicUrl) {
+          // Fall back to standard retention flow
+          fetchAndShowStandardOffer(box, eventId, reason, answer);
+          return;
+        }
+        renderHagginStep(box, eventId, result.data);
+      })
+      .catch(function (err) {
+        console.error('[RetainPulse] Haggin create failed, falling back:', err);
+        fetchAndShowStandardOffer(box, eventId, reason, answer);
+      });
+  }
+
+  function renderHagginStep(box, eventId, hagginData) {
+    clearElement(box);
+    state.submitting = false;
+
+    box.appendChild(el(
+      'h3',
+      'margin:0 0 10px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
+      { text: "Before you go — let's talk" }
+    ));
+
+    box.appendChild(el(
+      'p',
+      'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
+      { text: "You said price is the issue. Instead of cancelling, tell us what you'd pay. We might say yes." }
+    ));
+
+    var openBtn = el('button', [
+      'width:100%', 'padding:14px', 'margin-bottom:10px',
+      'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
+      'border-radius:12px', 'font-size:14px', 'font-weight:600',
+      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
+      'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
+    ].join(';'), { type: 'button', text: 'Make an offer →' });
+
+    openBtn.addEventListener('click', function () {
+      if (state.submitting) return;
+      state.submitting = true;
+      window.open(hagginData.publicUrl, '_blank');
+
+      recordDecision(eventId, true, 'negotiating');
+
+      closeModal();
+      var config = getConfig();
+      if (typeof config.onOfferAccepted === 'function') {
+        try { config.onOfferAccepted(); }
+        catch (err) { console.error('[RetainPulse] onOfferAccepted failed:', err); }
+      } else {
+        showToast("Opened negotiation page. Complete it in the new tab.");
+      }
+    });
+    box.appendChild(openBtn);
+
+    var cancelBtn = el('button', [
+      'width:100%', 'padding:14px', 'background:transparent',
+      'color:' + UI.textSubtle, 'border:none',
+      'border-radius:12px', 'font-size:13px', 'font-weight:500',
+      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
+      'text-decoration:underline'
+    ].join(';'), { type: 'button', text: 'No thanks, cancel my subscription' });
+
+    cancelBtn.addEventListener('click', function () {
+      if (state.submitting) return;
+      state.submitting = true;
+      recordDecision(eventId, false).then(function () {
+        completeCancellation();
+      });
+    });
+    box.appendChild(cancelBtn);
   }
 
   // ─────────────────────────────────────────────
