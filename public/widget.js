@@ -551,122 +551,126 @@
       });
   }
 
-  function renderHagginStep(box, eventId, hagginData) {
-    clearElement(box);
-    state.submitting = false;
+function renderHagginStep(box, eventId, hagginData) {
+  clearElement(box);
+  state.submitting = false;
 
-    box.appendChild(el(
-      'h3',
-      'margin:0 0 10px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
-      { text: "Before you go — let's talk" }
-    ));
+  box.appendChild(el(
+    'h3',
+    'margin:0 0 10px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
+    { text: "We hear you on price" }
+  ));
 
-    box.appendChild(el(
-      'p',
-      'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
-      { text: "You said price is the issue. Instead of cancelling, tell us what you'd pay. We might say yes." }
-    ));
+  box.appendChild(el(
+    'p',
+    'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
+    { text: "Instead of cancelling, name your price. We'll either say yes or no — no hard feelings." }
+  ));
 
-    var openBtn = el('button', [
-      'width:100%', 'padding:14px', 'margin-bottom:10px',
-      'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
-      'border-radius:12px', 'font-size:14px', 'font-weight:600',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-      'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
-    ].join(';'), { type: 'button', text: 'Make an offer →' });
+  var openBtn = el('button', [
+    'width:100%', 'padding:14px', 'margin-bottom:10px',
+    'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
+    'border-radius:12px', 'font-size:14px', 'font-weight:600',
+    'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
+    'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
+  ].join(';'), { type: 'button', text: 'Name your price →' });
 
-    openBtn.addEventListener('click', function () {
-      if (state.submitting) return;
-      state.submitting = true;
-      window.open(hagginData.publicUrl, '_blank');
+  openBtn.addEventListener('click', function () {
+    if (state.submitting) return;
+    state.submitting = true;
+    window.open(hagginData.publicUrl, '_blank');
 
-      recordDecision(eventId, true, 'negotiating');
+    recordDecision(eventId, true, 'negotiating');
 
+    showToast("Opened in a new tab. Come back here if you change your mind.");
+
+    setTimeout(function () {
       closeModal();
-      var config = getConfig();
-      if (typeof config.onOfferAccepted === 'function') {
-        try { config.onOfferAccepted(); }
-        catch (err) { console.error('[RetainPulse] onOfferAccepted failed:', err); }
-      } else {
-        showToast("Opened negotiation page. Complete it in the new tab.");
-      }
-    });
-    box.appendChild(openBtn);
+    }, 1500);
+  });
+  box.appendChild(openBtn);
 
-    var cancelBtn = el('button', [
-      'width:100%', 'padding:14px', 'background:transparent',
-      'color:' + UI.textSubtle, 'border:none',
-      'border-radius:12px', 'font-size:13px', 'font-weight:500',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-      'text-decoration:underline'
-    ].join(';'), { type: 'button', text: 'No thanks, cancel my subscription' });
+  var cancelBtn = el('button', [
+    'width:100%', 'padding:14px', 'background:transparent',
+    'color:' + UI.textSubtle, 'border:none',
+    'border-radius:12px', 'font-size:13px', 'font-weight:500',
+    'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
+    'text-decoration:underline'
+  ].join(';'), { type: 'button', text: 'No thanks, cancel my subscription' });
 
-    cancelBtn.addEventListener('click', function () {
-      if (state.submitting) return;
-      state.submitting = true;
-      recordDecision(eventId, false).then(function () {
-        completeCancellation();
-      });
+  cancelBtn.addEventListener('click', function () {
+    if (state.submitting) return;
+    state.submitting = true;
+    recordDecision(eventId, false).then(function () {
+      completeCancellation();
     });
-    box.appendChild(cancelBtn);
-  }
+  });
+  box.appendChild(cancelBtn);
+}
 
   // ─────────────────────────────────────────────
   //  API: submit reason → get AI question
   // ─────────────────────────────────────────────
   function submitReason(reason, box) {
-    var config = getConfig();
-    renderLoadingStep(box, 'Thinking...');
+  var config = getConfig();
+  renderLoadingStep(box, 'Thinking...');
 
-    fetch(API_BASE + '/api/follow-up', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        public_key: config.publicKey,
-        reason: reason,
-        customer_email: config.customerEmail || null
-      })
+  fetch(API_BASE + '/api/follow-up', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      public_key: config.publicKey,
+      reason: reason,
+      customer_email: config.customerEmail || null
     })
-      .then(function (res) {
-        return res.json().then(function (d) {
-          return { status: res.status, ok: res.ok, data: d };
-        });
-      })
-      .then(function (result) {
-        state.submitting = false;
-
-        if (result.status === 429) {
-          renderErrorStep(box, 'Too many requests. Please wait a few seconds and try again.', true, function () {
-            submitReason(reason, box);
-          });
-          return;
-        }
-        if (result.status === 404) {
-          renderErrorStep(box, 'This widget is not configured correctly.', false);
-          return;
-        }
-        if (!result.ok) {
-          renderErrorStep(box, 'Server error. Please try again in a moment.', true, function () {
-            submitReason(reason, box);
-          });
-          return;
-        }
-        if (result.data && result.data.success && result.data.event_id) {
-          renderFollowUpStep(box, result.data.event_id, result.data.question, reason);
-          return;
-        }
-        renderErrorStep(box, 'Unexpected response. Please try again.', true, function () {
-          submitReason(reason, box);
-        });
-      })
-      .catch(function (err) {
-        state.submitting = false;
-        console.error('[RetainPulse] Network error:', err);
-        renderErrorStep(box, 'Could not connect. Please check your internet.', true, function () {
-          submitReason(reason, box);
-        });
+  })
+    .then(function (res) {
+      return res.json().then(function (d) {
+        return { status: res.status, ok: res.ok, data: d };
       });
-  }
+    })
+    .then(function (result) {
+      state.submitting = false;
+
+      if (result.status === 429) {
+        renderErrorStep(box, 'Too many requests. Please wait a few seconds and try again.', true, function () {
+          submitReason(reason, box);
+        });
+        return;
+      }
+      if (result.status === 404) {
+        renderErrorStep(box, 'This widget is not configured correctly.', false);
+        return;
+      }
+      if (!result.ok) {
+        renderErrorStep(box, 'Server error. Please try again in a moment.', true, function () {
+          submitReason(reason, box);
+        });
+        return;
+      }
+
+      // For "Too expensive" — skip AI question, go straight to Haggin
+      if (reason === 'Too expensive' && config.customerEmail && result.data && result.data.event_id) {
+        createAndShowHaggin(box, result.data.event_id, reason, null);
+        return;
+      }
+
+      if (result.data && result.data.success && result.data.event_id) {
+        renderFollowUpStep(box, result.data.event_id, result.data.question, reason);
+        return;
+      }
+      renderErrorStep(box, 'Unexpected response. Please try again.', true, function () {
+        submitReason(reason, box);
+      });
+    })
+    .catch(function (err) {
+      state.submitting = false;
+      console.error('[RetainPulse] Network error:', err);
+      renderErrorStep(box, 'Could not connect. Please check your internet.', true, function () {
+        submitReason(reason, box);
+      });
+    });
+}
 
   // ─────────────────────────────────────────────
   //  Error step

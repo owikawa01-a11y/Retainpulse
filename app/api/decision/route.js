@@ -38,7 +38,7 @@ export async function POST(request) {
       return errorResponse('accepted must be a boolean', 400, 'INVALID_ACCEPTED');
     }
 
-    if (action != null && !['paused', 'stayed', 'cancelled'].includes(action)) {
+    if (action != null && !['paused', 'stayed', 'cancelled', 'negotiating'].includes(action)) {
       return errorResponse('Invalid action', 400, 'INVALID_ACTION');
     }
 
@@ -49,6 +49,7 @@ export async function POST(request) {
     if (action === 'paused') finalAction = 'paused';
     if (action === 'cancelled') finalAction = 'cancelled';
     if (action === 'stayed') finalAction = 'stayed';
+    if (action === 'negotiating') finalAction = 'negotiating';
 
     // MRR is analytics-only input from the merchant's widget configuration.
     // It must never be treated as authoritative billing data.
