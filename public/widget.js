@@ -1,14 +1,8 @@
 /**
- * RetainPulse Widget v4.5
- * Single-offer cancellation flow with Pause option
- *
- * Reads window.RetainPulseConfig dynamically at open-time,
- * so it works regardless of when the config is set on the page.
- *
- * v4.4 changes:
- * - Production API base (retainpulse.pro)
- * - Replaced native alert() with branded toast notifications
- * - Minor stability improvements
+ * RetainPulse Widget v5.1
+ * Quick-tap options + conditional follow-up
+ * "Too expensive" → Haggin negotiation
+ * Other reasons → sub-reason specific offers
  */
 
 (function () {
@@ -17,16 +11,10 @@
   var API_BASE = 'https://retainpulse.pro';
   var REQUEST_TIMEOUT_MS = 8000;
 
-  // ─────────────────────────────────────────────
-  //  Config accessor (dynamic — always fresh)
-  // ─────────────────────────────────────────────
   function getConfig() {
     return window.RetainPulseConfig || {};
   }
 
-  // ─────────────────────────────────────────────
-  //  Constants
-  // ─────────────────────────────────────────────
   var REASONS = [
     { id: 'price',      label: 'Too expensive' },
     { id: 'feature',    label: 'Missing a feature I need' },
@@ -88,16 +76,12 @@
   }
 
   // ─────────────────────────────────────────────
-  //  Toast notification (replaces alert())
+  //  Toast
   // ─────────────────────────────────────────────
   function showToast(message) {
-    // Remove existing toast if any
     var existing = document.getElementById('retainpulse-toast');
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-    if (state.toastTimer) {
-      clearTimeout(state.toastTimer);
-      state.toastTimer = null;
-    }
+    if (state.toastTimer) { clearTimeout(state.toastTimer); state.toastTimer = null; }
 
     var toast = document.createElement('div');
     toast.id = 'retainpulse-toast';
@@ -110,8 +94,7 @@
       'font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
       'font-size:14px', 'color:' + UI.text, 'line-height:1.5',
       'z-index:2147483647', 'display:flex', 'align-items:flex-start', 'gap:12px',
-      'animation:rpToastIn 0.3s ease-out',
-      'box-sizing:border-box'
+      'animation:rpToastIn 0.3s ease-out', 'box-sizing:border-box'
     ].join(';');
 
     var checkIcon = document.createElement('div');
@@ -140,7 +123,7 @@
   }
 
   // ─────────────────────────────────────────────
-  //  Network helper
+  //  Network
   // ─────────────────────────────────────────────
   function postJson(path, payload) {
     var controller = new AbortController();
@@ -165,7 +148,6 @@
   // ─────────────────────────────────────────────
   function createModal() {
     removeExistingModal();
-
     state.previousActiveElement = document.activeElement;
     state.previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -194,7 +176,6 @@
 
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-
     state.overlay = overlay;
 
     overlay.addEventListener('click', function (e) {
@@ -241,16 +222,14 @@
       try { state.previousActiveElement.focus(); } catch (e) {}
     }
     state.previousActiveElement = null;
-
   }
 
   // ─────────────────────────────────────────────
-  //  Cancellation completion
+  //  Cancellation
   // ─────────────────────────────────────────────
   function completeCancellation() {
     var config = getConfig();
     closeModal();
-
     if (typeof config.onCancelConfirmed === 'function') {
       try { config.onCancelConfirmed(); }
       catch (err) { console.error('[RetainPulse] onCancelConfirmed failed:', err); }
@@ -260,130 +239,185 @@
   }
 
   // ─────────────────────────────────────────────
+  //  Button factories
+  // ─────────────────────────────────────────────
+  function makeChoiceButton(label, onClick) {
+    var btn = el('button', [
+      'display:block', 'width:100%', 'text-align:left', 'padding:14px 18px',
+      'margin-bottom:10px', 'border:1.5px solid ' + UI.border,
+      'border-radius:12px', 'background:' + UI.bgSubtle, 'cursor:pointer',
+      'font-size:14px', 'font-weight:500', 'color:' + UI.text,
+      'transition:all 0.15s', 'font-family:inherit'
+    ].join(';'), { type: 'button', text: label });
+
+    btn.addEventListener('mouseenter', function () {
+      btn.style.borderColor = UI.brand;
+      btn.style.background = '#17142a';
+      btn.style.transform = 'translateY(-1px)';
+    });
+    btn.addEventListener('mouseleave', function () {
+      btn.style.borderColor = UI.border;
+      btn.style.background = UI.bgSubtle;
+      btn.style.transform = 'translateY(0)';
+    });
+    btn.addEventListener('click', function () {
+      if (state.submitting) return;
+      onClick();
+    });
+    return btn;
+  }
+
+  function makePrimaryButton(label, onClick) {
+    var btn = el('button', [
+      'width:100%', 'padding:14px', 'margin-bottom:10px',
+      'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
+      'border-radius:12px', 'font-size:14px', 'font-weight:600',
+      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
+      'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
+    ].join(';'), { type: 'button', text: label });
+
+    btn.addEventListener('click', function () {
+      if (state.submitting) return;
+      onClick();
+    });
+    return btn;
+  }
+
+  function makeSkipButton(label, onClick) {
+    var btn = el(
+      'button',
+      'margin-top:12px;background:none;border:none;color:' + UI.textSubtle +
+      ';font-size:13px;cursor:pointer;padding:8px;font-family:inherit;width:100%;text-decoration:underline;',
+      { type: 'button', text: label }
+    );
+    btn.addEventListener('click', function () {
+      if (state.submitting) return;
+      onClick();
+    });
+    return btn;
+  }
+
+  // ─────────────────────────────────────────────
   //  Step 1: Reason
   // ─────────────────────────────────────────────
   function renderReasonStep(box) {
     clearElement(box);
 
-    box.appendChild(el(
-      'h3',
+    box.appendChild(el('h3',
       'margin:0 0 6px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
       { text: 'Before you go...' }
     ));
 
-    box.appendChild(el(
-      'p',
+    box.appendChild(el('p',
       'margin:0 0 22px;font-size:14px;color:' + UI.textMuted + ';line-height:1.5;',
       { text: "We'd love to understand what's not working. Your feedback helps us improve." }
     ));
 
     REASONS.forEach(function (reason) {
-      var btn = el('button', [
-        'display:block', 'width:100%', 'text-align:left', 'padding:14px 18px',
-        'margin-bottom:10px', 'border:1.5px solid ' + UI.border,
-        'border-radius:12px', 'background:' + UI.bgSubtle, 'cursor:pointer',
-        'font-size:14px', 'font-weight:500', 'color:' + UI.text,
-        'transition:all 0.15s', 'font-family:inherit'
-      ].join(';'), { type: 'button', text: reason.label });
-
-      btn.addEventListener('mouseenter', function () {
-        btn.style.borderColor = UI.brand;
-        btn.style.background = '#17142a';
-        btn.style.transform = 'translateY(-1px)';
-      });
-      btn.addEventListener('mouseleave', function () {
-        btn.style.borderColor = UI.border;
-        btn.style.background = UI.bgSubtle;
-        btn.style.transform = 'translateY(0)';
-      });
-      btn.addEventListener('click', function () {
-        if (state.submitting) return;
+      var btn = makeChoiceButton(reason.label, function () {
         state.submitting = true;
         submitReason(reason.label, box);
       });
       box.appendChild(btn);
     });
 
-    var skip = el(
-      'button',
-      'margin-top:12px;background:none;border:none;color:' + UI.textSubtle +
-      ';font-size:13px;cursor:pointer;padding:8px;font-family:inherit;width:100%;text-decoration:underline;',
-      { type: 'button', text: 'Skip and cancel' }
-    );
-    skip.addEventListener('click', function () {
-      if (state.submitting) return;
+    box.appendChild(makeSkipButton('Skip and cancel', function () {
       state.submitting = true;
       completeCancellation();
-    });
-    box.appendChild(skip);
+    }));
   }
 
   // ─────────────────────────────────────────────
-  //  Loading state
+  //  Loading
   // ─────────────────────────────────────────────
   function renderLoadingStep(box, message) {
     clearElement(box);
     var wrapper = el('div', 'text-align:center;padding:20px 0;', null);
-
-    wrapper.appendChild(el(
-      'div',
+    wrapper.appendChild(el('div',
       'display:inline-block;width:32px;height:32px;border:3px solid ' + UI.border +
       ';border-top-color:' + UI.brand + ';border-radius:50%;animation:rpSpin 0.7s linear infinite;',
       null
     ));
-
-    wrapper.appendChild(el(
-      'p',
+    wrapper.appendChild(el('p',
       'margin:16px 0 0;font-size:14px;color:' + UI.textMuted + ';',
       { text: message || 'Thinking...' }
     ));
-
     box.appendChild(wrapper);
   }
 
   // ─────────────────────────────────────────────
-  //  Step 2: Follow-up question
+  //  Step 2: Follow-up (quick-tap OR textarea)
   // ─────────────────────────────────────────────
-  function renderFollowUpStep(box, eventId, question, reason) {
+  function renderFollowUpStep(box, eventId, followUp, reason) {
     clearElement(box);
     state.submitting = false;
 
-    box.appendChild(el(
-      'h3',
+    box.appendChild(el('h3',
       'margin:0 0 8px;font-size:18px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
       { text: 'One more thing' }
     ));
 
-    box.appendChild(el(
-      'p',
+    box.appendChild(el('p',
       'margin:0 0 18px;font-size:15px;color:' + UI.text + ';line-height:1.5;font-weight:500;',
-      { text: question }
+      { text: followUp.question }
     ));
 
+    // ── Quick-tap mode ──
+    if (followUp.options && followUp.options.length) {
+      followUp.options.forEach(function (opt) {
+        var btn = makeChoiceButton(opt.label, function () {
+          state.submitting = true;
+
+          postJson('/api/answer', {
+            event_id: eventId,
+            public_key: getConfig().publicKey,
+            sub_reason: opt.id
+          })
+            .then(function (result) {
+              if (!result.ok) {
+                state.submitting = false;
+                renderErrorStep(box, 'Could not save your answer. Please try again.', true, function () {
+                  submitReason(reason, box);
+                });
+                return;
+              }
+              fetchAndShowOffer(box, eventId, reason, null, opt.id);
+            })
+            .catch(function (err) {
+              state.submitting = false;
+              console.error('[RetainPulse] Failed to save sub_reason:', err);
+              renderErrorStep(box, 'Could not save your answer. Please try again.', true, function () {
+                submitReason(reason, box);
+              });
+            });
+        });
+        box.appendChild(btn);
+      });
+
+      box.appendChild(makeSkipButton('Skip and cancel', function () {
+        state.submitting = true;
+        recordDecision(eventId, false).then(function () { completeCancellation(); });
+      }));
+      return;
+    }
+
+    // ── Fallback mode: textarea (AI-generated question) ──
     var textarea = el('textarea', [
       'width:100%', 'padding:12px 14px', 'border:1.5px solid ' + UI.border,
       'border-radius:12px', 'font-size:14px', 'font-family:inherit',
       'resize:vertical', 'min-height:80px', 'box-sizing:border-box',
-      'color:' + UI.text, 'transition:border-color 0.15s', 'outline:none'
+      'color:' + UI.text, 'transition:border-color 0.15s', 'outline:none',
+      'background:transparent'
     ].join(';'), { rows: '3', placeholder: 'Your thoughts (optional)...' });
 
     textarea.addEventListener('focus', function () { textarea.style.borderColor = UI.brand; });
     textarea.addEventListener('blur',  function () { textarea.style.borderColor = UI.border; });
     box.appendChild(textarea);
 
-    var submitBtn = el('button', [
-      'margin-top:16px', 'width:100%', 'padding:14px',
-      'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
-      'border-radius:12px', 'font-size:14px', 'font-weight:600',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-      'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
-    ].join(';'), { type: 'button', text: 'Continue' });
-
-    submitBtn.addEventListener('click', function () {
-      if (state.submitting) return;
+    var submitBtn = makePrimaryButton('Continue', function () {
       state.submitting = true;
-
       var answer = textarea.value.trim();
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Saving...';
       submitBtn.style.opacity = '0.7';
@@ -393,63 +427,72 @@
         public_key: getConfig().publicKey,
         answer: answer
       })
-        .catch(function (err) { console.error('[RetainPulse] Failed to save answer:', err); })
-        .then(function () { fetchAndShowOffer(box, eventId, reason, answer); });
+        .then(function (result) {
+          if (!result.ok) {
+            state.submitting = false;
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Continue';
+            submitBtn.style.opacity = '1';
+            renderErrorStep(box, 'Could not save your answer. Please try again.', true, function () {
+              submitReason(reason, box);
+            });
+            return;
+          }
+          fetchAndShowOffer(box, eventId, reason, answer, null);
+        })
+        .catch(function (err) {
+          state.submitting = false;
+          console.error('[RetainPulse] Failed to save answer:', err);
+          renderErrorStep(box, 'Could not save your answer. Please try again.', true, function () {
+            submitReason(reason, box);
+          });
+        });
     });
     box.appendChild(submitBtn);
 
-    var skip = el(
-      'button',
-      'margin-top:10px;background:none;border:none;color:' + UI.textSubtle +
-      ';font-size:13px;cursor:pointer;padding:8px;font-family:inherit;width:100%;text-decoration:underline;',
-      { type: 'button', text: 'Skip and cancel' }
-    );
-    skip.addEventListener('click', function () {
-      if (state.submitting) return;
+    box.appendChild(makeSkipButton('Skip and cancel', function () {
       state.submitting = true;
       recordDecision(eventId, false).then(function () { completeCancellation(); });
-    });
-    box.appendChild(skip);
+    }));
   }
 
   // ─────────────────────────────────────────────
-  //  Step 3: Fetch + show retention offer
+  //  Step 3: Fetch offer
   // ─────────────────────────────────────────────
-    function fetchAndShowOffer(box, eventId, reason, answer) {
-    // If reason is "Too expensive" and we have the customer's email,
-    // open a Haggin negotiation instead of the standard offer.
+  function fetchAndShowOffer(box, eventId, reason, answer, subReason) {
     var config = getConfig();
+
+    // "Too expensive" + customer email → Haggin
     if (reason === 'Too expensive' && config.customerEmail) {
       createAndShowHaggin(box, eventId, reason, answer);
       return;
     }
-    fetchAndShowStandardOffer(box, eventId, reason, answer);
+    fetchAndShowStandardOffer(box, eventId, reason, answer, subReason);
   }
 
-  function fetchAndShowStandardOffer(box, eventId, reason, answer) {
+  function fetchAndShowStandardOffer(box, eventId, reason, answer, subReason) {
     renderLoadingStep(box, 'Preparing something...');
 
     postJson('/api/retention', {
       event_id: eventId,
       public_key: getConfig().publicKey,
       reason: reason,
-      follow_up_answer: answer
+      sub_reason: subReason || null,
+      follow_up_answer: answer || null
     })
       .then(function (result) {
-        if (!result.ok || !result.data.offer) {
-          recordDecision(eventId, false);
-          completeCancellation();
+        if (!result.ok || !result.data.offer || result.data.offer_type === 'no_offer') {
+          recordDecision(eventId, false).then(function () { completeCancellation(); });
           return;
         }
         renderOfferStep(box, eventId, result.data.offer, result.data.offer_type);
       })
       .catch(function (err) {
         console.error('[RetainPulse] Failed to fetch offer:', err);
-        recordDecision(eventId, false);
-        completeCancellation();
+        recordDecision(eventId, false).then(function () { completeCancellation(); });
       });
   }
-  
+
   // ─────────────────────────────────────────────
   //  Step 4: Offer display
   // ─────────────────────────────────────────────
@@ -457,80 +500,53 @@
     clearElement(box);
     state.submitting = false;
 
-    box.appendChild(el(
-      'h3',
+    box.appendChild(el('h3',
       'margin:0 0 10px;font-size:18px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
-      { text: 'Wait, before you cancel' }
+      { text: 'Before you go' }
     ));
 
-    box.appendChild(el(
-      'p',
+    box.appendChild(el('p',
       'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
       { text: offerText }
     ));
 
-    // Accept
-    var acceptBtn = el('button', [
-      'width:100%', 'padding:14px', 'margin-bottom:10px',
-      'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
-      'border-radius:12px', 'font-size:14px', 'font-weight:600',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-      'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
-    ].join(';'), { type: 'button', text: offerType === 'pause' ? 'Yes, pause my account' : 'Yes, keep my account' });
+    var acceptBtn = makePrimaryButton(
+      offerType === 'pause' ? 'Yes, pause my account' : "Yes, let's try that",
+      function () {
+        state.submitting = true;
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = 'Saving...';
+        acceptBtn.style.opacity = '0.7';
 
-    acceptBtn.addEventListener('click', function () {
-      if (state.submitting) return;
-      state.submitting = true;
-
-      acceptBtn.disabled = true;
-      acceptBtn.textContent = 'Saving...';
-      acceptBtn.style.opacity = '0.7';
-
-      recordDecision(eventId, true, offerType === 'pause' ? 'paused' : 'stayed').then(function () {
-        var config = getConfig();
-        closeModal();
-        if (typeof config.onOfferAccepted === 'function') {
-          try { config.onOfferAccepted(); }
-          catch (err) { console.error('[RetainPulse] onOfferAccepted failed:', err); }
-        } else {
-          showToast("We've noted your response — the offer will be applied to your account shortly.");
-        }
-      });
-    });
+        recordDecision(eventId, true, offerType === 'pause' ? 'paused' : 'stayed').then(function () {
+          var config = getConfig();
+          closeModal();
+          if (typeof config.onOfferAccepted === 'function') {
+            try { config.onOfferAccepted(); }
+            catch (err) { console.error('[RetainPulse] onOfferAccepted failed:', err); }
+          } else {
+            showToast("Got it — we'll be in touch.");
+          }
+        });
+      }
+    );
     box.appendChild(acceptBtn);
 
-    // No secondary offer is shown: the server returns exactly one deterministic offer.
-
-    // Decline
-    var declineBtn = el('button', [
-      'width:100%', 'padding:14px', 'background:transparent',
-      'color:' + UI.textSubtle, 'border:none',
-      'border-radius:12px', 'font-size:13px', 'font-weight:500',
-      'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-      'text-decoration:underline'
-    ].join(';'), { type: 'button', text: 'No thanks, cancel my subscription' });
-
-    declineBtn.addEventListener('click', function () {
-      if (state.submitting) return;
+    var declineBtn = makeSkipButton('No thanks, cancel my subscription', function () {
       state.submitting = true;
-
       declineBtn.disabled = true;
       declineBtn.textContent = 'Cancelling...';
       declineBtn.style.opacity = '0.6';
-
-      recordDecision(eventId, false).then(function () {
-        completeCancellation();
-      });
+      recordDecision(eventId, false).then(function () { completeCancellation(); });
     });
     box.appendChild(declineBtn);
   }
 
   // ─────────────────────────────────────────────
-  //  Step 5: Haggin negotiation (for "Too expensive")
+  //  Step 5: Haggin negotiation
   // ─────────────────────────────────────────────
   function createAndShowHaggin(box, eventId, reason, answer) {
     renderLoadingStep(box, 'Opening a negotiation...');
-
     var config = getConfig();
 
     postJson('/api/haggin/create', {
@@ -539,138 +555,95 @@
     })
       .then(function (result) {
         if (!result.ok || !result.data.publicUrl) {
-          // Fall back to standard retention flow
-          fetchAndShowStandardOffer(box, eventId, reason, answer);
+          fetchAndShowStandardOffer(box, eventId, reason, answer, null);
           return;
         }
         renderHagginStep(box, eventId, result.data);
       })
       .catch(function (err) {
-        console.error('[RetainPulse] Haggin create failed, falling back:', err);
-        fetchAndShowStandardOffer(box, eventId, reason, answer);
+        console.error('[RetainPulse] Haggin create failed:', err);
+        fetchAndShowStandardOffer(box, eventId, reason, answer, null);
       });
   }
 
-function renderHagginStep(box, eventId, hagginData) {
-  clearElement(box);
-  state.submitting = false;
+  function renderHagginStep(box, eventId, hagginData) {
+    clearElement(box);
+    state.submitting = false;
 
-  box.appendChild(el(
-    'h3',
-    'margin:0 0 10px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
-    { text: "We hear you on price" }
-  ));
+    box.appendChild(el('h3',
+      'margin:0 0 10px;font-size:20px;font-weight:700;color:' + UI.text + ';line-height:1.3;',
+      { text: 'We hear you on price' }
+    ));
 
-  box.appendChild(el(
-    'p',
-    'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
-    { text: "Instead of cancelling, name your price. We'll either say yes or no — no hard feelings." }
-  ));
+    box.appendChild(el('p',
+      'margin:0 0 20px;font-size:15px;color:' + UI.text + ';line-height:1.55;',
+      { text: "Instead of cancelling, name your price. We'll either say yes or no — no hard feelings." }
+    ));
 
-  var openBtn = el('button', [
-    'width:100%', 'padding:14px', 'margin-bottom:10px',
-    'background:' + UI.brandGradient, 'color:#ffffff', 'border:none',
-    'border-radius:12px', 'font-size:14px', 'font-weight:600',
-    'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-    'box-shadow:0 4px 14px rgba(139,92,246,0.3)'
-  ].join(';'), { type: 'button', text: 'Name your price →' });
-
-  openBtn.addEventListener('click', function () {
-    if (state.submitting) return;
-    state.submitting = true;
-    window.open(hagginData.publicUrl, '_blank');
-
-    recordDecision(eventId, true, 'negotiating');
-
-    showToast("Opened in a new tab. Come back here if you change your mind.");
-
-    setTimeout(function () {
-      closeModal();
-    }, 1500);
-  });
-  box.appendChild(openBtn);
-
-  var cancelBtn = el('button', [
-    'width:100%', 'padding:14px', 'background:transparent',
-    'color:' + UI.textSubtle, 'border:none',
-    'border-radius:12px', 'font-size:13px', 'font-weight:500',
-    'cursor:pointer', 'font-family:inherit', 'transition:all 0.15s',
-    'text-decoration:underline'
-  ].join(';'), { type: 'button', text: 'No thanks, cancel my subscription' });
-
-  cancelBtn.addEventListener('click', function () {
-    if (state.submitting) return;
-    state.submitting = true;
-    recordDecision(eventId, false).then(function () {
-      completeCancellation();
+    var openBtn = makePrimaryButton('Name your price →', function () {
+      state.submitting = true;
+      window.open(hagginData.publicUrl, '_blank');
+      recordDecision(eventId, true, 'negotiating');
+      showToast("Opened in a new tab. Come back here if you change your mind.");
+      setTimeout(function () { closeModal(); }, 1500);
     });
-  });
-  box.appendChild(cancelBtn);
-}
+    box.appendChild(openBtn);
+
+    box.appendChild(makeSkipButton('No thanks, cancel my subscription', function () {
+      state.submitting = true;
+      recordDecision(eventId, false).then(function () { completeCancellation(); });
+    }));
+  }
 
   // ─────────────────────────────────────────────
-  //  API: submit reason → get AI question
+  //  Submit reason
   // ─────────────────────────────────────────────
   function submitReason(reason, box) {
-  var config = getConfig();
-  renderLoadingStep(box, 'Thinking...');
+    var config = getConfig();
+    renderLoadingStep(box, 'Thinking...');
 
-  fetch(API_BASE + '/api/follow-up', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    postJson('/api/follow-up', {
       public_key: config.publicKey,
       reason: reason,
       customer_email: config.customerEmail || null
     })
-  })
-    .then(function (res) {
-      return res.json().then(function (d) {
-        return { status: res.status, ok: res.ok, data: d };
-      });
-    })
-    .then(function (result) {
-      state.submitting = false;
+      .then(function (result) {
+        state.submitting = false;
 
-      if (result.status === 429) {
-        renderErrorStep(box, 'Too many requests. Please wait a few seconds and try again.', true, function () {
-          submitReason(reason, box);
-        });
-        return;
-      }
-      if (result.status === 404) {
-        renderErrorStep(box, 'This widget is not configured correctly.', false);
-        return;
-      }
-      if (!result.ok) {
-        renderErrorStep(box, 'Server error. Please try again in a moment.', true, function () {
-          submitReason(reason, box);
-        });
-        return;
-      }
+        if (result.status === 429) {
+          renderErrorStep(box, 'Too many requests. Please wait a few seconds and try again.', true, function () { submitReason(reason, box); });
+          return;
+        }
+        if (result.status === 404) {
+          renderErrorStep(box, 'This widget is not configured correctly.', false);
+          return;
+        }
+        if (!result.ok) {
+          renderErrorStep(box, 'Server error. Please try again in a moment.', true, function () { submitReason(reason, box); });
+          return;
+        }
 
-      // For "Too expensive" — skip AI question, go straight to Haggin
-      if (reason === 'Too expensive' && config.customerEmail && result.data && result.data.event_id) {
-        createAndShowHaggin(box, result.data.event_id, reason, null);
-        return;
-      }
+        var eventId = result.data && result.data.event_id;
+        var followUp = result.data && result.data.follow_up;
 
-      if (result.data && result.data.success && result.data.event_id) {
-        renderFollowUpStep(box, result.data.event_id, result.data.question, reason);
-        return;
-      }
-      renderErrorStep(box, 'Unexpected response. Please try again.', true, function () {
-        submitReason(reason, box);
+        if (reason === 'Too expensive' && config.customerEmail && eventId) {
+          createAndShowHaggin(box, eventId, reason, null);
+          return;
+        }
+
+        if (eventId && followUp) {
+          renderFollowUpStep(box, eventId, followUp, reason);
+          return;
+        }
+
+        renderErrorStep(box, 'Unexpected response. Please try again.', true, function () { submitReason(reason, box); });
+      })
+      .catch(function (err) {
+        state.submitting = false;
+        console.error('[RetainPulse] Network error:', err);
+        renderErrorStep(box, 'Could not connect. Please check your internet.', true, function () { submitReason(reason, box); });
       });
-    })
-    .catch(function (err) {
-      state.submitting = false;
-      console.error('[RetainPulse] Network error:', err);
-      renderErrorStep(box, 'Could not connect. Please check your internet.', true, function () {
-        submitReason(reason, box);
-      });
-    });
-}
+  }
 
   // ─────────────────────────────────────────────
   //  Error step
@@ -684,14 +657,7 @@ function renderHagginStep(box, eventId, hagginData) {
     box.appendChild(el('p', 'margin:0 0 22px;font-size:14px;color:' + UI.textMuted + ';text-align:center;line-height:1.5;', { text: message }));
 
     if (canRetry && typeof onRetry === 'function') {
-      var retryBtn = el('button', [
-        'width:100%', 'padding:13px', 'background:' + UI.brandGradient,
-        'color:#ffffff', 'border:none', 'border-radius:12px',
-        'font-size:14px', 'font-weight:600', 'cursor:pointer',
-        'font-family:inherit', 'margin-bottom:10px'
-      ].join(';'), { type: 'button', text: 'Try again' });
-      retryBtn.addEventListener('click', onRetry);
-      box.appendChild(retryBtn);
+      box.appendChild(makePrimaryButton('Try again', onRetry));
     }
 
     var cancelBtn = el('button', [
@@ -704,7 +670,7 @@ function renderHagginStep(box, eventId, hagginData) {
   }
 
   // ─────────────────────────────────────────────
-  //  API: record decision
+  //  Record decision
   // ─────────────────────────────────────────────
   function recordDecision(eventId, accepted, action) {
     var config = getConfig();
@@ -731,26 +697,20 @@ function renderHagginStep(box, eventId, hagginData) {
   // ─────────────────────────────────────────────
   function show() {
     var config = getConfig();
-
     if (!config.publicKey) {
-      console.error('[RetainPulse] Cannot open: no publicKey set in window.RetainPulseConfig');
+      console.error('[RetainPulse] Cannot open: no publicKey');
       showToast('Configuration error: publicKey is missing. Please refresh and try again.');
       return;
     }
-
     state.submitting = false;
     var box = createModal();
     renderReasonStep(box);
   }
 
-  window.RetainPulse = {
-    show: show,
-    hide: closeModal,
-    version: '4.5'
-  };
+  window.RetainPulse = { show: show, hide: closeModal, version: '5.1' };
 
   // ─────────────────────────────────────────────
-  //  Auto-bind triggers + boot
+  //  Boot
   // ─────────────────────────────────────────────
   function init() {
     var triggers = document.querySelectorAll('[data-retainpulse-trigger]');
@@ -767,7 +727,7 @@ function renderHagginStep(box, eventId, hagginData) {
   function boot() {
     injectStyles();
     init();
-    console.log('[RetainPulse] Widget v4.5 ready');
+    console.log('[RetainPulse] Widget v5.1 ready');
   }
 
   if (document.readyState === 'loading') {
